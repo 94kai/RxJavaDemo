@@ -3,6 +3,7 @@ package com.xk.rxdemo;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.xk.rxdemo.api.CategoryManager;
 import com.xk.rxdemo.api.SearchManager;
@@ -15,13 +16,16 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.observers.DisposableObserver;
+import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -33,10 +37,116 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         compositeDisposable = new CompositeDisposable();
         setContentView(R.layout.activity_main);
+
     }
 
 
     public void method() {
+
+        //线程切换
+        Observable
+                .create(new ObservableOnSubscribe<Object>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<Object> emitter) throws Exception {
+                        //子线程
+                    }
+                })
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+//                .compose(RxSchedulerHelper.io_main())
+                .subscribe(new Consumer<Object>() {
+                    @Override
+                    public void accept(Object o) throws Exception {
+                        //主线程
+                    }
+                });
+
+
+        //消灭回调地狱
+        //1.普通写法
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                netWork(1, new Callback() {
+                    @Override
+                    public void onSuccess(int result) {
+                        netWork(result, new Callback() {
+                            @Override
+                            public void onSuccess(int result) {
+                                netWork(result, new Callback() {
+                                    @Override
+                                    public void onSuccess(int result) {
+                                        netWork(result, new Callback() {
+                                            @Override
+                                            public void onSuccess(int result) {
+                                                netWork(result, new Callback() {
+                                                    @Override
+                                                    public void onSuccess(int result) {
+                                                        runOnUiThread(new Runnable() {
+                                                            @Override
+                                                            public void run() {
+                                                                Toast.makeText(MainActivity.this, result, Toast.LENGTH_SHORT).show();
+                                                            }
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        }).start();
+
+        //2. rx写法(用lambda写会很简单)
+        netWork(1)
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .flatMap(new Function<Integer, ObservableSource<Integer>>() {
+                    @Override
+                    public ObservableSource<Integer> apply(Integer integer) throws Exception {
+                        return netWork(integer);
+                    }
+                })
+                .compose(RxSchedulerHelper.io_main())
+                .subscribe(new Consumer<Integer>() {
+                    @Override
+                    public void accept(Integer integer) throws Exception {
+                        Toast.makeText(MainActivity.this, integer, Toast.LENGTH_SHORT).show();
+                    }
+                });
+
 
         //简单的
         SearchManager.getProduct1(1)
@@ -238,8 +348,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    public void netWork(int params, Callback callback) {
+        try {
+            Thread.sleep(1000);
+            callback.onSuccess(params);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public Observable<Integer> netWork(int params) {
+        return Observable.create(new ObservableOnSubscribe<Integer>() {
+            @Override
+            public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                Log.i("MainActivity","netWork-->"+Thread.currentThread().getName());
+                emitter.onNext(params);
+                emitter.onComplete();
+            }
+        });
+    }
+
 }
 
+interface Callback {
+    void onSuccess(int result);
+}
 
 class MyThrowable extends Throwable {
 }
